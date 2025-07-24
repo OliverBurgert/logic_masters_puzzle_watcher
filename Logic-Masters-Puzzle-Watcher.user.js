@@ -1,10 +1,13 @@
 // ==UserScript==
 // @name         Logic Masters Puzzle Watcher
 // @namespace    http://tampermonkey.net/
-// @version      1.5
+// @version      1.6
 // @description  Watch favorite users for new/unsolved puzzles on Logic Masters Deutschland
 // @author       Oliver Burgert
 // @match        https://logic-masters.de/*
+// @license      GPL-3.0-or-later
+// @updateURL    https://raw.githubusercontent.com/OliverBurgert/logic_masters_puzzle_watcher/main/logic-masters-puzzle-watcher.user.js
+// @downloadURL  https://raw.githubusercontent.com/OliverBurgert/logic_masters_puzzle_watcher/main/logic-masters-puzzle-watcher.user.js
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
