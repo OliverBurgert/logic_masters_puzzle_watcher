@@ -110,7 +110,7 @@
 
                     // Only include new or unsolved puzzles (German and English versions)
                     // Matches "gelöst heute", "gelöst am", "solved today", "solved on"
-                    const isSolved = /gelöst (am|heute)|solved (on|today)/.test(desc);
+                    const isSolved = /gelöst (am|heute)|solved (on|today)/.test(descriptionText);
 
                     if (
                         ((status === 'neu' || status === 'new') && !isSolved) ||
