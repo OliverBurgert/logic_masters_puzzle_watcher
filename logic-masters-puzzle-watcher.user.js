@@ -1,16 +1,16 @@
 // ==UserScript==
 // @name         Logic Masters Puzzle Watcher
 // @namespace    http://tampermonkey.net/
-// @version      1.10
+// @version      2.0
 // @description  Watch favorite users for new/unsolved puzzles on Logic Masters Deutschland
 // @author       Oliver Burgert
 // @match        https://logic-masters.de/*
 // @license      GPL-3.0-or-later
-// @updateURL    https://raw.githubusercontent.com/OliverBurgert/logic_masters_puzzle_watcher/main/logic-masters-puzzle-watcher.user.js
-// @downloadURL  https://raw.githubusercontent.com/OliverBurgert/logic_masters_puzzle_watcher/main/logic-masters-puzzle-watcher.user.js
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
+// @downloadURL https://update.greasyfork.org/scripts/543482/Logic%20Masters%20Puzzle%20Watcher.user.js
+// @updateURL https://update.greasyfork.org/scripts/543482/Logic%20Masters%20Puzzle%20Watcher.meta.js
 // ==/UserScript==
 
 (function() {
@@ -190,15 +190,15 @@
         widget.id = 'puzzle-watcher-widget';
 
         widget.innerHTML = `
-            <h2>Puzzle Watcher</h2>
-            <div style="margin-bottom: 10px;">
-                <input type="text" id="new-user-input" placeholder="Username" style="width: 100px; margin-bottom: 5px;">
-                <br>
-                <button id="add-user-btn" style="font-size: 11px; margin-right: 5px;">Add User</button>
-                <button id="refresh-btn" style="font-size: 11px;">Refresh</button>
-            </div>
-            <div id="puzzle-results"></div>
+        <h2>Puzzle Watcher</h2>
+        <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap;">
+            <input type="text" id="new-user-input" placeholder="Username" style="width: 100px;">
+            <button id="add-user-btn" style="font-size: 11px;">Add User</button>
+            <button id="refresh-btn" style="font-size: 11px;">Refresh</button>
+        </div>
+        <div id="puzzle-results"></div>
         `;
+
 
         return widget;
     }
@@ -219,11 +219,13 @@
             favoriteUsers.forEach(username => {
                 const userData = puzzleData[username];
 
-                html += `<div style="border-bottom: 1px solid #ccc; margin-bottom: 10px; padding-bottom: 5px;">`;
-                html += `<div style="font-weight: bold; font-size: 12px;">`;
-                html += `<a href="/Raetselportal/Benutzer/eingestellt.php?name=${username}" style="text-decoration: none;">${username}</a>`;
-                html += ` <button class="remove-user-btn" data-username="${username}" style="font-size: 9px; margin-left: 5px;">Remove</button>`;
-                html += `</div>`;
+                html += `<div style="border-bottom: 1px solid #ccc; margin-bottom: 5px; padding: 3px 0;">`;
+                html += `
+                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: bold;">
+                        <a href="/Raetselportal/Benutzer/eingestellt.php?name=${username}" style="text-decoration: none;">${username}</a>
+                        <button class="remove-user-btn" data-username="${username}" style="font-size: 9px;">Remove</button>
+                    </div>
+                    `;
 
                 if (!userData) {
                     html += `<p style="font-size: 10px; color: #666;">Not checked yet...</p>`;
