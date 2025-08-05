@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Logic Masters Puzzle Watcher
 // @namespace    http://tampermonkey.net/
-// @version      1.7
+// @version      1.8
 // @description  Watch favorite users for new/unsolved puzzles on Logic Masters Deutschland
 // @author       Oliver Burgert
 // @match        https://logic-masters.de/*
@@ -111,9 +111,9 @@
                     // Only include new or unsolved puzzles (German and English versions)
                     if (
                         (status === 'neu' && !descriptionText.includes('gelöst am')) ||
-                        (status === 'neu' && !descriptionText.includes('gelöst Heute')) ||
+                        (status === 'neu' && !descriptionText.includes('gelöst Heute,')) ||
                         (status === 'new' && !descriptionText.includes('solved on')) ||
-                        (status === 'new' && !descriptionText.includes('solved today')) ||
+                        (status === 'new' && !descriptionText.includes('solved today,')) ||
                         status === 'ungeloest' ||
                         status === 'unsolved'
                     ) {
