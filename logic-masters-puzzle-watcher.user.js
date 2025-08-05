@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Logic Masters Puzzle Watcher
 // @namespace    http://tampermonkey.net/
-// @version      1.9
+// @version      1.10
 // @description  Watch favorite users for new/unsolved puzzles on Logic Masters Deutschland
 // @author       Oliver Burgert
 // @match        https://logic-masters.de/*
