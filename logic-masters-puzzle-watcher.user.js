@@ -1,126 +1,113 @@
 // ==UserScript==
 // @name         Logic Masters Puzzle Watcher
 // @namespace    http://tampermonkey.net/
-// @version      2.1
-// @description  Watch favorite users for new/unsolved puzzles on Logic Masters Deutschland
+// @version      3.0
+// @description  Watch favorite users and custom searches for new/unsolved puzzles on Logic Masters Deutschland
 // @author       Oliver Burgert
 // @match        https://logic-masters.de/*
 // @license      GPL-3.0-or-later
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_xmlhttpRequest
-// @downloadURL https://update.greasyfork.org/scripts/543482/Logic%20Masters%20Puzzle%20Watcher.user.js
-// @updateURL https://update.greasyfork.org/scripts/543482/Logic%20Masters%20Puzzle%20Watcher.meta.js
+// @downloadURL  https://update.greasyfork.org/scripts/543482/Logic%20Masters%20Puzzle%20Watcher.user.js
+// @updateURL    https://update.greasyfork.org/scripts/543482/Logic%20Masters%20Puzzle%20Watcher.meta.js
 // ==/UserScript==
 
 (function() {
     'use strict';
 
-    // Configuration
-    const CHECK_INTERVAL = 60 * 60 * 1000; // 1 hour in milliseconds
-    const DAILY_CHECK_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+    const CHECK_INTERVAL = 60 * 60 * 1000; // 1 hour
 
-    // Storage keys
     const STORAGE_KEYS = {
         FAVORITE_USERS: 'lm_favorite_users',
+        FAVORITE_SEARCHES: 'lm_favorite_searches',
         LAST_CHECK: 'lm_last_check',
         PUZZLE_DATA: 'lm_puzzle_data'
     };
 
-    // Initialize storage if needed
+    // ---------- Storage helpers ----------
     function initStorage() {
-        if (!GM_getValue(STORAGE_KEYS.FAVORITE_USERS)) {
-            GM_setValue(STORAGE_KEYS.FAVORITE_USERS, JSON.stringify([]));
-        }
-        if (!GM_getValue(STORAGE_KEYS.PUZZLE_DATA)) {
-            GM_setValue(STORAGE_KEYS.PUZZLE_DATA, JSON.stringify({}));
-        }
+        if (!GM_getValue(STORAGE_KEYS.FAVORITE_USERS)) GM_setValue(STORAGE_KEYS.FAVORITE_USERS, JSON.stringify([]));
+        if (!GM_getValue(STORAGE_KEYS.FAVORITE_SEARCHES)) GM_setValue(STORAGE_KEYS.FAVORITE_SEARCHES, JSON.stringify([]));
+        if (!GM_getValue(STORAGE_KEYS.PUZZLE_DATA)) GM_setValue(STORAGE_KEYS.PUZZLE_DATA, JSON.stringify({}));
     }
 
-    // Get favorite users list
     function getFavoriteUsers() {
         return JSON.parse(GM_getValue(STORAGE_KEYS.FAVORITE_USERS, '[]'));
     }
 
-    // Save favorite users list
     function saveFavoriteUsers(users) {
         GM_setValue(STORAGE_KEYS.FAVORITE_USERS, JSON.stringify(users));
     }
 
-    // Get puzzle data
+    function getFavoriteSearches() {
+        return JSON.parse(GM_getValue(STORAGE_KEYS.FAVORITE_SEARCHES, '[]'));
+    }
+
+    function saveFavoriteSearches(searches) {
+        GM_setValue(STORAGE_KEYS.FAVORITE_SEARCHES, JSON.stringify(searches));
+    }
+
     function getPuzzleData() {
         return JSON.parse(GM_getValue(STORAGE_KEYS.PUZZLE_DATA, '{}'));
     }
 
-    // Save puzzle data
     function savePuzzleData(data) {
         GM_setValue(STORAGE_KEYS.PUZZLE_DATA, JSON.stringify(data));
     }
 
-    // Get last check timestamp
     function getLastCheck() {
         return GM_getValue(STORAGE_KEYS.LAST_CHECK, 0);
     }
 
-    // Save last check timestamp
-    function saveLastCheck(timestamp) {
-        GM_setValue(STORAGE_KEYS.LAST_CHECK, timestamp);
+    function saveLastCheck(ts) {
+        GM_setValue(STORAGE_KEYS.LAST_CHECK, ts);
     }
 
-    // Check if we need to update data
     function shouldCheck() {
-        const lastCheck = getLastCheck();
-        const now = Date.now();
-        return (now - lastCheck) >= CHECK_INTERVAL;
+        return Date.now() - getLastCheck() >= CHECK_INTERVAL;
     }
 
-    // Parse puzzle data from HTML
-    function parsePuzzleData(html, username) {
+    // ---------- Data fetching ----------
+    function parsePuzzleData(html) {
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
-
-        // Check for error message first
         const errorElement = doc.querySelector('p.rp_error');
-        if (errorElement) {
-            throw new Error('User does not exist');
-        }
+        if (errorElement) throw new Error('No results');
 
         const puzzleRows = doc.querySelectorAll('table.rp_raetselliste tr');
-
+        // console.log(puzzleRows)
         const puzzles = [];
-
-        for (let i = 1; i < puzzleRows.length; i++) { // Skip header row
-            const row = puzzleRows[i];
-            const cells = row.querySelectorAll('td');
-
+        for (let i = 1; i < puzzleRows.length; i++) {
+            const cells = puzzleRows[i].querySelectorAll('td');
+            // console.log(cells)
             if (cells.length >= 4) {
-                const statusImg = cells[0].querySelector('img');
-                const puzzleLink = cells[1].querySelector('a');
-                const solvedCount = cells[2].textContent.trim();
-                const ratingCell = cells[3];
+                // console.log(cells[1].innerText)
+                let image_index = 0; // Start with the default index for users
+                // Check the computed style of the first cell for right alignment to detect free search resutls
+                if (cells[0].style.textAlign === "right") {
+                    image_index = 1;
+                }
+                const statusImg = cells[image_index + 0].querySelector('img');
+                const puzzleLink = cells[image_index + 1].querySelector('a');
+                const solvedCount = cells[image_index + 2].textContent.trim();
+                const ratingCell = cells[image_index + 3];
 
                 if (statusImg && puzzleLink) {
                     const status = statusImg.getAttribute('title');
                     const difficultyImg = ratingCell.querySelector('img');
                     const ratingSpan = ratingCell.querySelector('span');
 
-                    // Extract description span text (e.g. "von <user> (gelöst am ...)")
-                    const descriptionSpan = cells[1].querySelector('span');
+                    const descriptionSpan = cells[image_index + 1].querySelector('span');
                     const descriptionText = descriptionSpan ? descriptionSpan.textContent.trim().toLowerCase() : '';
-
-                    // Only include new or unsolved puzzles (German and English versions)
-                    // Matches "gelöst heute", "gelöst am", "solved today", "solved on"
                     const isSolved = /gelöst (am|heute|gestern)|solved (on|today|yesterday)/.test(descriptionText);
+                    // console.log(descriptionText, isSolved)
 
-                    if (
-                        ((status === 'neu' || status === 'new') && !isSolved) ||
-                        status === 'ungeloest' ||
-                        status === 'unsolved'
-                    ) {
+                    if (!isSolved) {
                         puzzles.push({
                             name: puzzleLink.textContent.trim(),
                             link: puzzleLink.getAttribute('href'),
-                            status: status,
+                            status,
                             solved: solvedCount,
                             difficulty: difficultyImg ? difficultyImg.getAttribute('alt') : '?',
                             difficultyTitle: difficultyImg ? difficultyImg.getAttribute('title') : '',
@@ -130,223 +117,209 @@
                 }
             }
         }
-
         return puzzles;
     }
 
-    // Fetch puzzle data for a user
     function fetchUserPuzzles(username) {
-        return new Promise((resolve, reject) => {
-            const url = `https://logic-masters.de/Raetselportal/Benutzer/eingestellt.php?name=${username}`;
+        const url = `https://logic-masters.de/Raetselportal/Benutzer/eingestellt.php?name=${encodeURIComponent(username)}`;
+        return fetchPuzzlesGeneric('user:' + username, url);
+    }
 
+    function fetchSearchPuzzles(shortName, searchString) {
+        const url = `https://logic-masters.de/Raetselportal/Suche/erweitert.php?${searchString}`;
+        return fetchPuzzlesGeneric('search:' + shortName, url);
+    }
+
+    function fetchPuzzlesGeneric(key, url) {
+        //console.log('fetching Key:', key, url);
+        return new Promise(resolve => {
             GM_xmlhttpRequest({
                 method: 'GET',
-                url: url,
-                onload: function(response) {
+                url,
+                onload: response => {
                     if (response.status === 200) {
                         try {
-                            const puzzles = parsePuzzleData(response.responseText, username);
-                            resolve({ username, puzzles, error: null });
+                            const puzzles = parsePuzzleData(response.responseText);
+                            //console.log('parsing result:', puzzles)
+                            resolve({ key, puzzles, error: null });
                         } catch (e) {
-                            resolve({ username, puzzles: [], error: 'Failed to parse puzzle data' });
+                            resolve({ key, puzzles: [], error: 'Failed to parse puzzle data' });
                         }
                     } else {
-                        resolve({ username, puzzles: [], error: 'User does not exist' });
+                        resolve({ key, puzzles: [], error: 'Request failed' });
                     }
                 },
-                onerror: function() {
-                    resolve({ username, puzzles: [], error: 'Network error' });
-                }
+                onerror: () => resolve({ key, puzzles: [], error: 'Network error' })
             });
         });
     }
 
-    // Update puzzle data for all favorite users
     async function updatePuzzleData() {
-        const favoriteUsers = getFavoriteUsers();
+        const users = getFavoriteUsers();
+        const searches = getFavoriteSearches();
         const puzzleData = {};
 
-        const promises = favoriteUsers.map(user => fetchUserPuzzles(user));
-        const results = await Promise.all(promises);
+        const requests = [
+            ...users.map(u => fetchUserPuzzles(u)),
+            ...searches.map(s => fetchSearchPuzzles(s.shortName, s.searchString))
+        ];
 
-        results.forEach(result => {
-            puzzleData[result.username] = {
-                puzzles: result.puzzles,
-                error: result.error,
+        const results = await Promise.all(requests);
+        results.forEach(r => {
+            puzzleData[r.key] = {
+                puzzles: r.puzzles,
+                error: r.error,
                 lastUpdate: Date.now()
             };
         });
-
         savePuzzleData(puzzleData);
         saveLastCheck(Date.now());
-
         return puzzleData;
     }
 
-    // Create the widget HTML
+    // ---------- UI ----------
     function createWidget() {
-        const widget = document.createElement('div');
-        widget.className = 'box menu';
-        widget.id = 'puzzle-watcher-widget';
-
-        widget.innerHTML = `
-        <h2>Puzzle Watcher</h2>
-        <div style="margin-bottom: 10px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap;">
-            <input type="text" id="new-user-input" placeholder="Username" style="width: 100px;">
-            <button id="add-user-btn" style="font-size: 11px;">Add User</button>
-            <button id="refresh-btn" style="font-size: 11px;">Refresh</button>
-        </div>
-        <div id="puzzle-results"></div>
-        `;
-
-
-        return widget;
+        const w = document.createElement('div');
+        w.className = 'box menu';
+        w.id = 'puzzle-watcher-widget';
+        w.innerHTML = `
+            <h2>Puzzle Watcher</h2>
+            <div style="margin-bottom:10px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                <input id="new-user-input" placeholder="Username" style="width:100px;">
+                <button id="add-user-btn" style="font-size:11px;">Add User</button>
+                <button id="refresh-btn" style="font-size:11px;">Refresh</button>
+            </div>
+            <div style="margin-bottom:10px;display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                <input id="new-search-shortname" placeholder="Short name" style="width:90px;">
+                <input id="new-search-string" placeholder="Search string" style="width:150px;">
+                <button id="add-search-btn" style="font-size:11px;">Add Search</button>
+            </div>
+            <div id="puzzle-results"></div>`;
+        return w;
     }
 
-    // Update widget display
     function updateWidgetDisplay() {
         const resultsDiv = document.getElementById('puzzle-results');
         if (!resultsDiv) return;
 
-        const favoriteUsers = getFavoriteUsers();
-        const puzzleData = getPuzzleData();
-
+        const users = getFavoriteUsers();
+        const searches = getFavoriteSearches();
+        const data = getPuzzleData();
         let html = '';
 
-        if (favoriteUsers.length === 0) {
-            html = '<p style="font-size: 11px;">No users being watched.</p>';
+        if (users.length === 0 && searches.length === 0) {
+            html = '<p style="font-size:11px;">No users or searches being watched.</p>';
         } else {
-            favoriteUsers.forEach(username => {
-                const userData = puzzleData[username];
-
-                html += `<div style="border-bottom: 1px solid #ccc; margin-bottom: 5px; padding: 3px 0;">`;
-                html += `
-                    <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: bold;">
-                        <a href="/Raetselportal/Benutzer/eingestellt.php?name=${username}" style="text-decoration: none;">${username}</a>
-                        <button class="remove-user-btn" data-username="${username}" style="font-size: 9px;">Remove</button>
-                    </div>
-                    `;
-
-                if (!userData) {
-                    html += `<p style="font-size: 10px; color: #666;">Not checked yet...</p>`;
-                } else if (userData.error) {
-                    html += `<p style="font-size: 10px; color: #f00;">${userData.error}</p>`;
-                } else if (userData.puzzles.length === 0) {
-                    html += `<p style="font-size: 10px; color: #666;">No new puzzles</p>`;
-                } else {
-                    userData.puzzles.forEach(puzzle => {
-                        html += `<div style="margin: 2px 0 2px 15px; font-size: 10px; display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap;">`;
-                        html += `<a href="${puzzle.link}" style="text-decoration: none; display: inline;">${puzzle.name}</a>`;
-                        html += `<span style="color: #666; font-size: 9px; display: inline;">(Level ${puzzle.difficulty}, ${puzzle.rating}, ${puzzle.solved} solved)</span>`;
-                        html += `</div>`;
-                    });
-                }
-                html += `</div>`;
-            });
+            // Users
+            users.forEach(u => html += buildEntryHTML('user', u, data['user:' + u], `/Raetselportal/Benutzer/eingestellt.php?name=${encodeURIComponent(u)}`));
+            // Searches
+            searches.forEach(s => html += buildEntryHTML('search', s.shortName, data['search:' + s.shortName], `/Raetselportal/Suche/erweitert.php?${s.searchString}`));
         }
 
         resultsDiv.innerHTML = html;
 
-        const removeButtons = resultsDiv.querySelectorAll('.remove-user-btn');
-        removeButtons.forEach(button => {
-            button.addEventListener('click', function () {
-                const username = this.getAttribute('data-username');
-                removeUser(username);
+        resultsDiv.querySelectorAll('.remove-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const type = this.dataset.type, key = this.dataset.key;
+                if (type === 'user') removeUser(key);
+                else removeSearch(key);
             });
         });
     }
 
-    // Add user to favorites
+    function buildEntryHTML(type, label, entryData, link) {
+        let html = `<div style="border-bottom:1px solid #ccc;margin-bottom:5px;padding:3px 0;">`;
+        html += `<div style="display:flex;justify-content:space-between;align-items:center;font-size:12px;font-weight:bold;">`;
+        html += `<a href="${link}" style="text-decoration:none;">${label}</a>`;
+        html += `<button class="remove-btn" data-type="${type}" data-key="${label}" style="font-size:9px;">Remove</button></div>`;
+        if (!entryData) html += `<p style="font-size:10px;color:#666;">Not checked yet...</p>`;
+        else if (entryData.error) html += `<p style="font-size:10px;color:#f00;">${entryData.error}</p>`;
+        else if (entryData.puzzles.length === 0) html += `<p style="font-size:10px;color:#666;">No new puzzles</p>`;
+        else entryData.puzzles.forEach(p => {
+            html += `<div style="margin:2px 0 2px 15px;font-size:10px;display: flex; align-items: baseline; gap: 4px; flex-wrap: wrap;">`;
+            html += `<a href="${p.link}" style="text-decoration:none;">${p.name}</a>`;
+            html += `<span style="color:#666;font-size:9px;"> (Level ${p.difficulty}, ${p.rating}, ${p.solved} solved)</span>`;
+            html += `</div>`;
+        });
+        html += `</div>`;
+        return html;
+    }
+
+    // ---------- User / Search management ----------
     function addUser() {
-        const input = document.getElementById('new-user-input');
-        const username = input.value.trim();
-
-        if (username) {
-            const favoriteUsers = getFavoriteUsers();
-            if (!favoriteUsers.includes(username)) {
-                favoriteUsers.push(username);
-                saveFavoriteUsers(favoriteUsers);
-                refreshData();
-                updateWidgetDisplay();
-            }
-            input.value = '';
+        const inp = document.getElementById('new-user-input');
+        const val = inp.value.trim();
+        if (!val) return;
+        const users = getFavoriteUsers();
+        if (!users.includes(val)) {
+            users.push(val);
+            saveFavoriteUsers(users);
+            refreshData();
+            updateWidgetDisplay();
         }
+        inp.value = '';
     }
 
-    // Remove user from favorites
     function removeUser(username) {
-        const favoriteUsers = getFavoriteUsers();
-        const index = favoriteUsers.indexOf(username);
-        if (index > -1) {
-            favoriteUsers.splice(index, 1);
-            saveFavoriteUsers(favoriteUsers);
-
-            // Also remove their data
-            const puzzleData = getPuzzleData();
-            delete puzzleData[username];
-            savePuzzleData(puzzleData);
-
-            updateWidgetDisplay();
-        }
+        const users = getFavoriteUsers().filter(u => u !== username);
+        saveFavoriteUsers(users);
+        const data = getPuzzleData();
+        delete data['user:' + username];
+        savePuzzleData(data);
+        updateWidgetDisplay();
     }
 
-    // Refresh puzzle data
+    function addSearch() {
+        const sn = document.getElementById('new-search-shortname').value.trim();
+        const ss = document.getElementById('new-search-string').value.trim();
+        if (!sn || !ss) return alert('Both short name and search string are required.');
+        const searches = getFavoriteSearches();
+        if (!searches.some(s => s.shortName === sn)) {
+            searches.push({ shortName: sn, searchString: ss });
+            saveFavoriteSearches(searches);
+            refreshData();
+            updateWidgetDisplay();
+        }
+        document.getElementById('new-search-shortname').value = '';
+        document.getElementById('new-search-string').value = '';
+    }
+
+    function removeSearch(shortName) {
+        const searches = getFavoriteSearches().filter(s => s.shortName !== shortName);
+        saveFavoriteSearches(searches);
+        const data = getPuzzleData();
+        delete data['search:' + shortName];
+        savePuzzleData(data);
+        updateWidgetDisplay();
+    }
+
+    // ---------- Refresh ----------
     async function refreshData() {
-        const refreshBtn = document.getElementById('refresh-btn');
-        if (refreshBtn) {
-            refreshBtn.textContent = 'Loading...';
-            refreshBtn.disabled = true;
-        }
-
-        try {
-            await updatePuzzleData();
-            updateWidgetDisplay();
-        } finally {
-            if (refreshBtn) {
-                refreshBtn.textContent = 'Refresh';
-                refreshBtn.disabled = false;
-            }
-        }
+        const btn = document.getElementById('refresh-btn');
+        if (btn) { btn.textContent = 'Loading...'; btn.disabled = true; }
+        try { await updatePuzzleData(); updateWidgetDisplay(); }
+        finally { if (btn) { btn.textContent = 'Refresh'; btn.disabled = false; } }
     }
 
-    // Make functions globally available for onclick handlers
-    window.removeUser = removeUser;
-
-    // Initialize everything
+    // ---------- Init ----------
     function init() {
         initStorage();
+        const col = document.querySelector('.leftcolumn');
+        if (!col) return;
+        const widget = createWidget();
+        col.appendChild(widget);
 
-        // Find the left column and add our widget
-        const leftColumn = document.querySelector('.leftcolumn');
-        if (leftColumn) {
-            const widget = createWidget();
-            leftColumn.appendChild(widget);
+        document.getElementById('add-user-btn').addEventListener('click', addUser);
+        document.getElementById('add-search-btn').addEventListener('click', addSearch);
+        document.getElementById('refresh-btn').addEventListener('click', refreshData);
 
-            // Add event listeners
-            document.getElementById('add-user-btn').addEventListener('click', addUser);
-            document.getElementById('refresh-btn').addEventListener('click', refreshData);
+        document.getElementById('new-user-input').addEventListener('keypress', e => { if (e.key === 'Enter') addUser(); });
+        document.getElementById('new-search-string').addEventListener('keypress', e => { if (e.key === 'Enter') addSearch(); });
 
-            // Allow adding user with Enter key
-            document.getElementById('new-user-input').addEventListener('keypress', function(e) {
-                if (e.key === 'Enter') {
-                    addUser();
-                }
-            });
-
-            // Update display with current data
-            updateWidgetDisplay();
-
-            // Check if we need to update data automatically
-            if (shouldCheck()) {
-                refreshData();
-            }
-        }
+        updateWidgetDisplay();
+        if (shouldCheck()) refreshData();
     }
 
-    // Wait for the page to load
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', init);
-    } else {
-        init();
-    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else init();
 })();

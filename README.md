@@ -15,6 +15,10 @@ The script helps to check if one of your favourite setters has published a new p
 4. Just click on the puzzle name to jump to a specific puzzle
 5. You can click on a user name to jump to the first page of published puzzles of this user.
 6. If you want to remove a user from your list, click on the "remove" button next to the user
+7. You can do the same for all search strings on LMG:
+   1. Create the search string by using the "advanced search" functionality of the website. 
+   2. Copy the search string to clipboard. The search string is everything behind the "?" at the URL `https://logic-masters.de/Raetselportal/Suche/erweitert.php?`
+   3. Add a short name for your query.
 
 ## Remarks
 Checking just the first page of puzzles is intentional to reduce server load, speed up the script, and avoid very long result lists. 
